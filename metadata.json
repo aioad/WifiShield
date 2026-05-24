@@ -1,0 +1,8 @@
+{
+  "name": "Remix: WiFi Shield",
+  "description": "Full-spectrum cybersecurity monitor and in-app VPN protection layer for public Wi-Fi safety.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
