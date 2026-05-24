@@ -32,6 +32,13 @@ class WifiShieldViewModel(private val repository: NetworkRepository) : ViewModel
     private val _scanResult = MutableStateFlow<WifiScanResult?>(null)
     val scanResult: StateFlow<WifiScanResult?> = _scanResult.asStateFlow()
 
+    // AI Advisory States
+    private val _aiAdvisoryState = MutableStateFlow<AiAdvisoryState>(AiAdvisoryState.Idle)
+    val aiAdvisoryState: StateFlow<AiAdvisoryState> = _aiAdvisoryState.asStateFlow()
+
+    private val _aiChatState = MutableStateFlow<AiChatState>(AiChatState.Idle)
+    val aiChatState: StateFlow<AiChatState> = _aiChatState.asStateFlow()
+
     private val _scanState = MutableStateFlow<ScanState>(ScanState.Idle)
     val scanState: StateFlow<ScanState> = _scanState.asStateFlow()
 
@@ -291,7 +298,14 @@ class WifiShieldViewModel(private val repository: NetworkRepository) : ViewModel
     // Private utils to query system network adapters
     private fun getDeviceSsid(context: Context): String {
         val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
-        var ssid = wifiManager?.connectionInfo?.ssid ?: ""
+        var ssid = ""
+        try {
+            ssid = wifiManager?.connectionInfo?.ssid ?: ""
+        } catch (e: SecurityException) {
+            Log.w("WifiShieldViewModel", "No permission to get SSID via connectionInfo: ${e.message}")
+        } catch (e: Exception) {
+            Log.e("WifiShieldViewModel", "Exception reading SSID: ${e.message}")
+        }
         
         // Remove enclosing quotes
         if (ssid.startsWith("\"") && ssid.endsWith("\"")) {
@@ -321,6 +335,154 @@ class WifiShieldViewModel(private val repository: NetworkRepository) : ViewModel
         val capabilities = connectivityManager?.getNetworkCapabilities(activeNetwork)
         return capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ?: false
     }
+
+    // AI Integration functions
+    fun analyzeNetworkWithAi(result: WifiScanResult) {
+        _aiAdvisoryState.value = AiAdvisoryState.Loading
+        viewModelScope.launch {
+            try {
+                val apiKey = com.example.BuildConfig.GEMINI_API_KEY
+                if (apiKey.isEmpty() || apiKey == "MY_GEMINI_API_KEY") {
+                    _aiAdvisoryState.value = AiAdvisoryState.Error(
+                        "Gemini API Key is missing. Please set your key in the AI Studio Secrets panel."
+                    )
+                    return@launch
+                }
+
+                // Construct a detailed payload prompt
+                val threatIndicators = mutableListOf<String>()
+                if (result.isOpen) threatIndicators.add("- Open Wi-Fi (No Encryption)")
+                if (result.weakEncryption) threatIndicators.add("- Weak / Outdated WEP protocol")
+                if (result.suspiciousDns) threatIndicators.add("- Rogue DNS / Poison Configuration")
+                if (result.captivePortalDetected) threatIndicators.add("- Unsecured Captive Portal Intercept")
+                if (result.mitmIndicator) threatIndicators.add("- Potential MITM Downgrade risks")
+                if (result.evilTwinDetected) threatIndicators.add("- Potential Evil Twin (SSID cloning spoof)")
+                if (result.arpSpoofingDetected) threatIndicators.add("- ARP Spoofing/Network poisoning traces")
+                if (result.httpsDowngradeDetected) threatIndicators.add("- HTTPS Downgrade vulnerability")
+                if (result.suspiciousGateway) threatIndicators.add("- Suspicious Local Gateway Broadcasts")
+
+                val threatListStr = if (threatIndicators.isEmpty()) "None detected" else threatIndicators.joinToString("\n")
+
+                val prompt = """
+                    You are an elite cyber-security AI network safety advisor. 
+                    Provide a detailed, professional, and readable network vulnerability analysis based on the following Wi-Fi scan results:
+                    
+                    SSID: "${result.ssid}"
+                    Connection Type: ${result.connectionType}
+                    Encryption Type: ${result.encryptionType}
+                    Safety Status: ${result.status.name}
+                    Calculated Safety Score: ${result.score}/100 (Where 0 is extremely compromised and 100 is fully trusted & secured)
+                    DNS Info: ${result.dnsInfo}
+                    Gateway IP: ${result.gatewayIp}
+                    
+                    Identified Vulnerability Indicators:
+                    $threatListStr
+                    
+                    Please structure your assessment with the following sections using clean text / markdown bullet points:
+                    1. **OVERALL RISK RATING**: (Brief 1-2 sentence high-level security verdict on whether the user is safe typing passwords, reading emails, etc.)
+                    2. **THREAT VULNERABILITY BREAKDOWN**: (For any identified vulnerability indicators above, provide a quick plain-English explanation of what that means and how an attacker could exploit it.)
+                    3. **CRITICAL DEFENSE STEPS**: (Provide 3 concrete, styled, bulletproof bullet actions the user should take right now to secure their communications, e.g. using VPN, visiting only HTTPS websites, disabling auto-reconnect, etc.)
+                    
+                    Keep the tone professional, direct, encouraging, and authoritative. Avoid overly technical jargon where possible so the average user can understand, but maintain elite cyber-security standards.
+                """.trimIndent()
+
+                val request = com.example.data.api.GeminiRequest(
+                    contents = listOf(
+                        com.example.data.api.Content(
+                            parts = listOf(com.example.data.api.Part(text = prompt))
+                        )
+                    )
+                )
+
+                val response = com.example.data.api.GeminiRetrofitClient.service.generateContent(apiKey, request)
+                val responseText = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
+                if (responseText != null) {
+                    _aiAdvisoryState.value = AiAdvisoryState.Success(responseText)
+                } else {
+                    _aiAdvisoryState.value = AiAdvisoryState.Error("Received empty assessment from AI.")
+                }
+            } catch (e: Exception) {
+                Log.e("WifiShieldViewModel", "Gemini API error during threat advice: ", e)
+                _aiAdvisoryState.value = AiAdvisoryState.Error("Failed to fetch assessment: ${e.localizedMessage ?: "Unknown network error"}")
+            }
+        }
+    }
+
+    fun askAiQuestion(question: String, result: WifiScanResult?) {
+        if (question.isBlank()) return
+        _aiChatState.value = AiChatState.Loading
+        viewModelScope.launch {
+            try {
+                val apiKey = com.example.BuildConfig.GEMINI_API_KEY
+                if (apiKey.isEmpty() || apiKey == "MY_GEMINI_API_KEY") {
+                    _aiChatState.value = AiChatState.Error(
+                        "Gemini API Key is missing. Please set your key in the AI Studio Secrets panel."
+                    )
+                    return@launch
+                }
+
+                val currentNetworkContext = if (result != null) {
+                    """
+                    Current Wi-Fi Context:
+                    - SSID: "${result.ssid}"
+                    - Security Score: ${result.score}/100 [Status: ${result.status.name}]
+                    - Encryption: ${result.encryptionType}
+                    - Active threats flagged: Open WiFi(${result.isOpen}), Rogue DNS(${result.suspiciousDns}), ARP Spoofing(${result.arpSpoofingDetected}), MITM(${result.mitmIndicator})
+                    """.trimIndent()
+                } else {
+                    "No active scan results or offline disconnected."
+                }
+
+                val prompt = """
+                    You are the elite "WiFi Shield AI Counselor" integrated inside a real-time mobile cybersecurity app.
+                    
+                    $currentNetworkContext
+                    
+                    The user has asked the following security/network question:
+                    "$question"
+                    
+                    Provide a plain-English, professional, informative, and engaging answer. Focus on concrete explanations, mobile internet safety, and VPN benefits where matching. Keep your response under 150 words and extremely readable, formatted with clear bullets if appropriate.
+                """.trimIndent()
+
+                val request = com.example.data.api.GeminiRequest(
+                    contents = listOf(
+                        com.example.data.api.Content(
+                            parts = listOf(com.example.data.api.Part(text = prompt))
+                        )
+                    )
+                )
+
+                val response = com.example.data.api.GeminiRetrofitClient.service.generateContent(apiKey, request)
+                val responseText = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
+                if (responseText != null) {
+                    _aiChatState.value = AiChatState.Success(responseText)
+                } else {
+                    _aiChatState.value = AiChatState.Error("AI was unable to process the query.")
+                }
+            } catch (e: Exception) {
+                Log.e("WifiShieldViewModel", "Gemini API error during Q&A: ", e)
+                _aiChatState.value = AiChatState.Error("Error contacting AI: ${e.localizedMessage ?: "Unknown error"}")
+            }
+        }
+    }
+
+    fun resetAiChat() {
+        _aiChatState.value = AiChatState.Idle
+    }
+}
+
+sealed class AiAdvisoryState {
+    object Idle : AiAdvisoryState()
+    object Loading : AiAdvisoryState()
+    data class Success(val advice: String) : AiAdvisoryState()
+    data class Error(val errorMessage: String) : AiAdvisoryState()
+}
+
+sealed class AiChatState {
+    object Idle : AiChatState()
+    object Loading : AiChatState()
+    data class Success(val response: String) : AiChatState()
+    data class Error(val errorMessage: String) : AiChatState()
 }
 
 sealed class ScanState {

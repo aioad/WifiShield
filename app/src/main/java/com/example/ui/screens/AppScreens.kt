@@ -238,6 +238,8 @@ fun DashboardScreen(
     val isVpnActive by viewModel.isVpnActiveFlow.collectAsState()
     val autoVpn by viewModel.autoVpnEnabled.collectAsState()
     val countdown by viewModel.warningCountdown.collectAsState()
+    val aiAdvisoryState by viewModel.aiAdvisoryState.collectAsState()
+    val aiChatState by viewModel.aiChatState.collectAsState()
 
     // Activity Result Launcher to prepare & trigger Android VPN permissions window
     val vpnPrepareLauncher = rememberLauncherForActivityResult(
@@ -985,6 +987,278 @@ fun DashboardScreen(
                             CyberIndicatorRow(title = "Evil Twin (SSID cloning spoof)", flagged = result.evilTwinDetected)
                             CyberIndicatorRow(title = "ARP Network Poisoning Detection", flagged = result.arpSpoofingDetected)
                             CyberIndicatorRow(title = "Suspicious Local Gateway Broadcasts", flagged = result.suspiciousGateway)
+                        }
+                    }
+                }
+            }
+
+            item {
+                Column {
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    Text(
+                        text = "GEMINI CYBER ADVISOR",
+                        color = CyberBlue,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace,
+                        letterSpacing = 2.sp,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
+
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.dp, CyberBorder, RoundedCornerShape(24.dp)),
+                        colors = CardDefaults.cardColors(containerColor = CyberCard)
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Psychology,
+                                        contentDescription = null,
+                                        tint = CyberBlue,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column {
+                                        Text(
+                                            text = "AI Threat Intelligence",
+                                            color = Color.White,
+                                            fontSize = 15.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Text(
+                                            text = "On-demand network risk diagnostics",
+                                            color = Color.Gray,
+                                            fontSize = 11.sp
+                                        )
+                                    }
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .background(CyberBlue.copy(alpha = 0.15f), RoundedCornerShape(100.dp))
+                                        .border(1.dp, CyberBlue, RoundedCornerShape(100.dp))
+                                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                                ) {
+                                    Text(
+                                        text = "AI MODEL",
+                                        color = CyberBlue,
+                                        fontSize = 8.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        fontFamily = FontFamily.Monospace
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            when (val state = aiAdvisoryState) {
+                                is com.example.ui.AiAdvisoryState.Idle -> {
+                                    Text(
+                                        text = "Run a live Gemini intelligence assessment of the current scan scores, ports, encryption factors, and rogue configuration metrics to receive tailored safety ratings.",
+                                        color = Color.LightGray,
+                                        fontSize = 12.sp,
+                                        lineHeight = 16.sp
+                                    )
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    Button(
+                                        onClick = { viewModel.analyzeNetworkWithAi(result) },
+                                        colors = ButtonDefaults.buttonColors(containerColor = CyberBlue, contentColor = CyberBlack),
+                                        modifier = Modifier.fillMaxWidth().testTag("ai_run_assessment_button"),
+                                        shape = RoundedCornerShape(12.dp)
+                                    ) {
+                                        Icon(imageVector = Icons.Filled.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text("Audit Network with AI", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                    }
+                                }
+                                is com.example.ui.AiAdvisoryState.Loading -> {
+                                    Column(
+                                        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally
+                                    ) {
+                                        CircularProgressIndicator(color = CyberBlue, modifier = Modifier.size(32.dp))
+                                        Spacer(modifier = Modifier.height(12.dp))
+                                        Text(
+                                            text = "Consulting Gemini AI security brain...",
+                                            color = CyberBlue,
+                                            fontSize = 11.sp,
+                                            fontFamily = FontFamily.Monospace,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                    }
+                                }
+                                is com.example.ui.AiAdvisoryState.Success -> {
+                                    Column {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .background(Color.White.copy(alpha = 0.03f), RoundedCornerShape(12.dp))
+                                                .border(1.dp, CyberBorder, RoundedCornerShape(12.dp))
+                                                .padding(12.dp)
+                                        ) {
+                                            Text(
+                                                text = state.advice,
+                                                color = Color.White,
+                                                fontSize = 12.sp,
+                                                lineHeight = 18.sp
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.height(12.dp))
+                                        Button(
+                                            onClick = { viewModel.analyzeNetworkWithAi(result) },
+                                            colors = ButtonDefaults.buttonColors(containerColor = CyberSlate, contentColor = Color.White),
+                                            border = BorderStroke(1.dp, CyberBorder),
+                                            modifier = Modifier.fillMaxWidth(),
+                                            shape = RoundedCornerShape(12.dp)
+                                        ) {
+                                            Text("Refresh Report", fontSize = 11.sp)
+                                        }
+                                    }
+                                }
+                                is com.example.ui.AiAdvisoryState.Error -> {
+                                    Column(modifier = Modifier.fillMaxWidth()) {
+                                        Text(
+                                            text = state.errorMessage,
+                                            color = CyberRed,
+                                            fontSize = 12.sp
+                                        )
+                                        Spacer(modifier = Modifier.height(12.dp))
+                                        Button(
+                                            onClick = { viewModel.analyzeNetworkWithAi(result) },
+                                            colors = ButtonDefaults.buttonColors(containerColor = CyberRed, contentColor = Color.White),
+                                            shape = RoundedCornerShape(12.dp),
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Text("Retry Assessment", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                        }
+                                    }
+                                }
+                            }
+
+                            Divider(color = CyberBorder, modifier = Modifier.padding(vertical = 16.dp))
+
+                            // Interactive Ask-AI Console Row
+                            Text(
+                                text = "ASK WI-FI SHIELD AI ASSISTANT",
+                                color = CyberBlue,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace,
+                                letterSpacing = 1.sp,
+                                modifier = Modifier.padding(bottom = 8.dp)
+                            )
+
+                            var queryText by remember { mutableStateOf("") }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                OutlinedTextField(
+                                    value = queryText,
+                                    onValueChange = { queryText = it },
+                                    placeholder = { Text("e.g. What is automatic VPN?", fontSize = 12.sp, color = Color.Gray) },
+                                    modifier = Modifier.weight(1f).testTag("ai_chat_query_input"),
+                                    singleLine = true,
+                                    textStyle = androidx.compose.ui.text.TextStyle(color = Color.White, fontSize = 13.sp),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor = CyberBlue,
+                                        unfocusedBorderColor = CyberBorder,
+                                        cursorColor = CyberBlue
+                                    ),
+                                    shape = RoundedCornerShape(12.dp)
+                                )
+
+                                Button(
+                                    onClick = {
+                                        if (queryText.isNotBlank()) {
+                                            viewModel.askAiQuestion(queryText, result)
+                                        }
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = CyberBlue, contentColor = CyberBlack),
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier.height(52.dp).testTag("ai_send_query_button"),
+                                    contentPadding = PaddingValues(horizontal = 14.dp)
+                                ) {
+                                    Icon(imageVector = Icons.Filled.Send, contentDescription = "Send", modifier = Modifier.size(16.dp))
+                                }
+                            }
+
+                            val chatState = aiChatState
+                            if (chatState !is com.example.ui.AiChatState.Idle) {
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .border(1.dp, CyberBorder, RoundedCornerShape(16.dp)),
+                                    colors = CardDefaults.cardColors(containerColor = CyberBlack)
+                                ) {
+                                    Column(modifier = Modifier.padding(12.dp)) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = "AI RESPONSE CONSOLE",
+                                                color = CyberGreen,
+                                                fontSize = 9.sp,
+                                                fontFamily = FontFamily.Monospace,
+                                                fontWeight = FontWeight.Bold,
+                                                letterSpacing = 1.sp
+                                            )
+                                            Icon(
+                                                imageVector = Icons.Filled.Close,
+                                                contentDescription = "Clear",
+                                                tint = Color.Gray,
+                                                modifier = Modifier
+                                                    .size(14.dp)
+                                                    .clickable { viewModel.resetAiChat() }
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        when (chatState) {
+                                            is com.example.ui.AiChatState.Loading -> {
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    CircularProgressIndicator(color = CyberGreen, modifier = Modifier.size(14.dp), strokeWidth = 1.5.dp)
+                                                    Spacer(modifier = Modifier.width(8.dp))
+                                                    Text(
+                                                        text = "Decrypting AI counselor reply...",
+                                                        color = CyberGreen,
+                                                        fontSize = 11.sp,
+                                                        fontFamily = FontFamily.Monospace
+                                                    )
+                                                }
+                                            }
+                                            is com.example.ui.AiChatState.Success -> {
+                                                Text(
+                                                    text = chatState.response,
+                                                    color = Color.LightGray,
+                                                    fontSize = 11.sp,
+                                                    lineHeight = 16.sp
+                                                )
+                                            }
+                                            is com.example.ui.AiChatState.Error -> {
+                                                Text(
+                                                    text = chatState.errorMessage,
+                                                    color = CyberRed,
+                                                    fontSize = 11.sp,
+                                                    fontFamily = FontFamily.Monospace
+                                                )
+                                            }
+                                            else -> {}
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }

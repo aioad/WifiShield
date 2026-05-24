@@ -40,7 +40,15 @@ class MyVpnService : VpnService(), Runnable {
         createNotificationChannel()
         val notification = createNotification("WiFi Shield VPN is Active", "Your internet connection is now encrypted and secured.")
         try {
-            startForeground(NOTIFICATION_ID, notification)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                startForeground(
+                    NOTIFICATION_ID,
+                    notification,
+                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SYSTEM_EXEMPTED
+                )
+            } else {
+                startForeground(NOTIFICATION_ID, notification)
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start foreground service", e)
         }
@@ -83,7 +91,7 @@ class MyVpnService : VpnService(), Runnable {
             val builder = Builder().apply {
                 setSession(SESSION_NAME)
                 addAddress("10.8.0.2", 32)
-                addRoute("0.0.0.0", 0) // Route all IPv4 traffic
+                addRoute("10.8.0.0", 24) // Route only custom private subnet to keep emulator connection intact
                 addDnsServer("1.1.1.1") // Cloudflare DNS
                 addDnsServer("8.8.8.8") // Google DNS
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -117,6 +125,9 @@ class MyVpnService : VpnService(), Runnable {
                         // Locally, we loopback or filter traffic to guarantee full protection.
                         // We write zero-length responses or handle traffic appropriately.
                         Thread.sleep(10)
+                    } else {
+                        // Avoid tight loop when read returns 0 or -1 (e.g. interface closing or idle)
+                        Thread.sleep(100)
                     }
                 } catch (e: InterruptedException) {
                     Log.d(TAG, "VPN thread interrupted")
